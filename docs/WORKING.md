@@ -19,7 +19,7 @@
   - [x] 背景：agent 派出 background sub-agent 时会创建子 session（`Session.parentID` 指向父 session），此前所有 session 平级显示导致列表 cluttered
   - [x] 实现：`SessionNode` 树结构 + `AppState.buildSessionTree(from:)` 静态方法，按 `parentID` 递归构建层级；孤儿 session（parentID 指向不存在的 session）自动提升为根节点
   - [x] UI：子 session 缩进（depth × 24pt）、字号缩小（`.subheadline`）、颜色变淡（`.secondary`）；父 session 左侧显示 chevron 折叠/展开按钮
-  - [x] `collapsedSessionIDs: Set<String>` 跟踪折叠状态，`toggleSessionCollapsed()` 切换
+  - [x] `expandedSessionIDs: Set<String>` 跟踪展开状态（默认收起），`toggleSessionExpanded()` 切换
   - [x] iPhone（`SessionListView`）和 iPad（`SplitSidebarView.SessionsSidebarList`）同步更新为树状递归渲染
   - [x] 单元测试：7 个测试覆盖层级构建、孤儿处理、排序、多级嵌套、空输入、归档过滤、折叠状态切换
 

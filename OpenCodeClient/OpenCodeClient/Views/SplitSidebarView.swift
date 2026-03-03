@@ -130,9 +130,9 @@ private struct SessionsSidebarList: View {
                     isDeleting: deletingSessionID == node.session.id,
                     depth: depth,
                     hasChildren: !node.children.isEmpty,
-                    isCollapsed: state.collapsedSessionIDs.contains(node.session.id),
+                    isCollapsed: !state.expandedSessionIDs.contains(node.session.id),
                     onSelect: { state.selectSession(node.session) },
-                    onToggleCollapse: { state.toggleSessionCollapsed(node.session.id) }
+                    onToggleCollapse: { state.toggleSessionExpanded(node.session.id) }
                 )
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button {
@@ -144,7 +144,7 @@ private struct SessionsSidebarList: View {
                     .disabled(deletingSessionID != nil)
                 }
 
-                if !state.collapsedSessionIDs.contains(node.session.id) {
+                if state.expandedSessionIDs.contains(node.session.id) {
                     sessionNodes(node.children, depth: depth + 1)
                 }
             }

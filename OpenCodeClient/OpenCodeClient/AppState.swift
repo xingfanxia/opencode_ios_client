@@ -429,7 +429,7 @@ final class AppState {
         }
     }
     private var _showArchivedSessions: Bool = false
-    var collapsedSessionIDs: Set<String> = []
+    var expandedSessionIDs: Set<String> = []
 
     var projects: [Project] = []
     var isLoadingProjects: Bool = false
@@ -615,11 +615,11 @@ final class AppState {
         return roots
     }
 
-    func toggleSessionCollapsed(_ sessionID: String) {
-        if collapsedSessionIDs.contains(sessionID) {
-            collapsedSessionIDs.remove(sessionID)
+    func toggleSessionExpanded(_ sessionID: String) {
+        if expandedSessionIDs.contains(sessionID) {
+            expandedSessionIDs.remove(sessionID)
         } else {
-            collapsedSessionIDs.insert(sessionID)
+            expandedSessionIDs.insert(sessionID)
         }
     }
 

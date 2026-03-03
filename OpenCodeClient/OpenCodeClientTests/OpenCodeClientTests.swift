@@ -1535,12 +1535,12 @@ struct SessionTreeTests {
         #expect(tree[0].session.id == "active")
     }
 
-    @Test @MainActor func toggleSessionCollapsedAddsAndRemovesSessionID() {
+    @Test @MainActor func toggleSessionExpandedAddsAndRemovesSessionID() {
         let state = AppState()
-        #expect(state.collapsedSessionIDs.isEmpty)
-        state.toggleSessionCollapsed("s1")
-        #expect(state.collapsedSessionIDs.contains("s1"))
-        state.toggleSessionCollapsed("s1")
-        #expect(state.collapsedSessionIDs.contains("s1") == false)
+        #expect(state.expandedSessionIDs.isEmpty)
+        state.toggleSessionExpanded("s1")
+        #expect(state.expandedSessionIDs.contains("s1"))
+        state.toggleSessionExpanded("s1")
+        #expect(state.expandedSessionIDs.contains("s1") == false)
     }
 }
