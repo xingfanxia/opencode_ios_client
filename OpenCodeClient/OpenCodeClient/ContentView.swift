@@ -16,6 +16,12 @@ struct ContentView: View {
     /// iPad / Vision Pro：左右分栏，无 Tab Bar
     private var useSplitLayout: Bool { sizeClass == .regular }
 
+    private var shouldHideEmptyPreviewColumn: Bool {
+        useSplitLayout
+            && state.hideEmptyPreviewPaneOnIPad
+            && ((state.previewFilePath ?? "").isEmpty)
+    }
+
     private var themeColorScheme: ColorScheme? {
         switch state.themePreference {
         case "light": return .light
@@ -162,17 +168,28 @@ struct ContentView: View {
             let paneMin = min(paneIdeal, total * LayoutConstants.SplitView.paneMinFraction)
             let paneMax = max(paneIdeal, total * LayoutConstants.SplitView.paneMaxFraction)
 
-            NavigationSplitView {
-                SplitSidebarView(state: state)
-                    .navigationSplitViewColumnWidth(min: sidebarMin, ideal: sidebarIdeal, max: sidebarMax)
-            } content: {
-                PreviewColumnView(state: state)
-                    .navigationSplitViewColumnWidth(min: paneMin, ideal: paneIdeal, max: paneMax)
-            } detail: {
-                ChatTabView(state: state, showSettingsInToolbar: true, onSettingsTap: { showSettingsSheet = true })
-                    .navigationSplitViewColumnWidth(min: paneMin, ideal: paneIdeal, max: paneMax)
+            if shouldHideEmptyPreviewColumn {
+                NavigationSplitView {
+                    SplitSidebarView(state: state)
+                        .navigationSplitViewColumnWidth(min: sidebarMin, ideal: sidebarIdeal, max: sidebarMax)
+                } detail: {
+                    ChatTabView(state: state, showSettingsInToolbar: true, onSettingsTap: { showSettingsSheet = true })
+                        .navigationSplitViewColumnWidth(min: paneMin, ideal: paneIdeal, max: paneMax)
+                }
+                .navigationSplitViewStyle(.balanced)
+            } else {
+                NavigationSplitView {
+                    SplitSidebarView(state: state)
+                        .navigationSplitViewColumnWidth(min: sidebarMin, ideal: sidebarIdeal, max: sidebarMax)
+                } content: {
+                    PreviewColumnView(state: state)
+                        .navigationSplitViewColumnWidth(min: paneMin, ideal: paneIdeal, max: paneMax)
+                } detail: {
+                    ChatTabView(state: state, showSettingsInToolbar: true, onSettingsTap: { showSettingsSheet = true })
+                        .navigationSplitViewColumnWidth(min: paneMin, ideal: paneIdeal, max: paneMax)
+                }
+                .navigationSplitViewStyle(.balanced)
             }
-            .navigationSplitViewStyle(.balanced)
         }
     }
 }

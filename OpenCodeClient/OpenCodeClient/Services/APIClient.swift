@@ -233,11 +233,18 @@ actor APIClient {
         return try? decoder.decode(type, from: data)
     }
 
-    func promptAsync(sessionID: String, text: String, agent: String = "build", model: Message.ModelInfo?) async throws {
+    func promptAsync(
+        sessionID: String,
+        text: String,
+        agent: String = "build",
+        model: Message.ModelInfo?,
+        variant: String? = nil
+    ) async throws {
         struct PromptBody: Encodable {
             let parts: [PartInput]
             let agent: String
             let model: ModelInput?
+            let variant: String?
             struct PartInput: Encodable {
                 let type = "text"
                 let text: String
@@ -250,7 +257,8 @@ actor APIClient {
         let body = PromptBody(
             parts: [.init(text: text)],
             agent: agent,
-            model: model.map { .init(providerID: $0.providerID, modelID: $0.modelID) }
+            model: model.map { .init(providerID: $0.providerID, modelID: $0.modelID) },
+            variant: variant
         )
         let bodyData = try JSONEncoder().encode(body)
         let (_, response) = try await makeRequest(path: "/session/\(sessionID)/prompt_async", method: "POST", body: bodyData)

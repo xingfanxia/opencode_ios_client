@@ -72,6 +72,9 @@ struct FileTreeView: View {
         func flatten(_ nodes: [FileNode], indent: Int) -> [TreeNodeItem] {
             var result: [TreeNodeItem] = []
             for node in nodes {
+                if shouldHideNode(node) {
+                    continue
+                }
                 result.append(TreeNodeItem(node: node, indent: indent))
                 if node.type == "directory", state.isFileExpanded(node.path),
                    let children = state.cachedChildren(for: node.path) {
@@ -81,6 +84,10 @@ struct FileTreeView: View {
             return result
         }
         return flatten(state.fileTreeRoot, indent: 0)
+    }
+
+    private func shouldHideNode(_ node: FileNode) -> Bool {
+        state.hideDotFilesAndFoldersInWorkspace && node.name.hasPrefix(".")
     }
 
     private func loadAndExpand(_ path: String) async {

@@ -14,6 +14,18 @@ struct SessionNode: Identifiable {
     var id: String { session.id }
 }
 
+struct ServerProfile: Codable, Identifiable, Equatable {
+    let id: String
+    var name: String
+    var serverURL: String
+    var username: String
+
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? serverURL : trimmed
+    }
+}
+
 @Observable
 @MainActor
 final class AppState {
@@ -130,6 +142,7 @@ final class AppState {
         set {
             _serverURL = newValue
             UserDefaults.standard.set(newValue, forKey: Self.serverURLKey)
+            syncActiveServerProfileFromCurrentConnection(persistPassword: false)
         }
     }
 
@@ -139,6 +152,7 @@ final class AppState {
         set {
             _username = newValue
             UserDefaults.standard.set(newValue, forKey: Self.usernameKey)
+            syncActiveServerProfileFromCurrentConnection(persistPassword: false)
         }
     }
 
@@ -152,12 +166,16 @@ final class AppState {
             } else {
                 KeychainHelper.save(newValue, forKey: Self.passwordKeychainKey)
             }
+            syncActiveServerProfileFromCurrentConnection(persistPassword: true)
         }
     }
 
     private static let serverURLKey = "serverURL"
     private static let usernameKey = "username"
     private static let passwordKeychainKey = "password"
+    private static let serverProfilesKey = "serverProfiles"
+    private static let activeServerProfileIDKey = "activeServerProfileID"
+    private static let serverProfilePasswordKeyPrefix = "serverProfilePassword."
     private static let aiBuilderBaseURLKey = "aiBuilderBaseURL"
     private static let aiBuilderTokenKeychainKey = "aiBuilderToken"
     private static let aiBuilderCustomPromptKey = "aiBuilderCustomPrompt"
@@ -169,6 +187,16 @@ final class AppState {
     private static let showArchivedSessionsKey = "showArchivedSessions"
     private static let selectedProjectWorktreeKey = "selectedProjectWorktree"
     private static let customProjectPathKey = "customProjectPath"
+    private static let hideEmptyPreviewPaneOnIPadKey = "hideEmptyPreviewPaneOnIPad"
+    private static let hideDotFilesAndFoldersInWorkspaceKey = "hideDotFilesAndFoldersInWorkspace"
+
+    var serverProfiles: [ServerProfile] = []
+    var activeServerProfileID: String? { _activeServerProfileID }
+    var activeServerProfileName: String {
+        activeServerProfile?.displayName ?? L10n.t(.settingsProfile)
+    }
+    var canDeleteActiveServerProfile: Bool { serverProfiles.count > 1 }
+    private var _activeServerProfileID: String?
 
     init() {
         if let storedServer = UserDefaults.standard.string(forKey: Self.serverURLKey) {
@@ -183,6 +211,15 @@ final class AppState {
         }
         _username = UserDefaults.standard.string(forKey: Self.usernameKey) ?? ""
         _password = KeychainHelper.load(forKey: Self.passwordKeychainKey) ?? ""
+        let legacyServerURL = _serverURL
+        let legacyUsername = _username
+        let legacyPassword = _password
+
+        bootstrapServerProfiles(
+            legacyServerURL: legacyServerURL,
+            legacyUsername: legacyUsername,
+            legacyPassword: legacyPassword
+        )
 
         _aiBuilderBaseURL = UserDefaults.standard.string(forKey: Self.aiBuilderBaseURLKey) ?? "https://space.ai-builders.com/backend"
         _aiBuilderToken = KeychainHelper.load(forKey: Self.aiBuilderTokenKeychainKey) ?? ""
@@ -191,6 +228,8 @@ final class AppState {
         _showArchivedSessions = UserDefaults.standard.bool(forKey: Self.showArchivedSessionsKey)
         _selectedProjectWorktree = UserDefaults.standard.string(forKey: Self.selectedProjectWorktreeKey)
         _customProjectPath = UserDefaults.standard.string(forKey: Self.customProjectPathKey) ?? ""
+        _hideEmptyPreviewPaneOnIPad = UserDefaults.standard.bool(forKey: Self.hideEmptyPreviewPaneOnIPadKey)
+        _hideDotFilesAndFoldersInWorkspace = UserDefaults.standard.bool(forKey: Self.hideDotFilesAndFoldersInWorkspaceKey)
 
         // Restore last known-good AI Builder connection state if token/baseURL unchanged.
         let storedSig = UserDefaults.standard.string(forKey: Self.aiBuilderLastOKSignatureKey)
@@ -210,6 +249,190 @@ final class AppState {
         if let data = UserDefaults.standard.data(forKey: Self.selectedModelBySessionKey),
            let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
             selectedModelIDBySessionID = decoded
+        }
+    }
+
+    private var activeServerProfile: ServerProfile? {
+        guard let id = _activeServerProfileID else { return nil }
+        return serverProfiles.first { $0.id == id }
+    }
+
+    private static func serverProfilePasswordKey(for profileID: String) -> String {
+        "\(Self.serverProfilePasswordKeyPrefix)\(profileID)"
+    }
+
+    private static func profileNameFallback(for serverURL: String) -> String {
+        let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return L10n.t(.settingsProfile) }
+        let normalized = Self.ensureServerURLHasScheme(trimmed) ?? trimmed
+        guard let host = URL(string: normalized)?.host, !host.isEmpty else {
+            return L10n.t(.settingsProfile)
+        }
+        if host == "127.0.0.1" || host == "localhost" {
+            return "Local"
+        }
+        return host
+    }
+
+    private func normalizedProfileName(_ raw: String?, fallbackServerURL: String) -> String {
+        let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return Self.profileNameFallback(for: fallbackServerURL)
+    }
+
+    private func uniqueProfileName(_ base: String) -> String {
+        let taken = Set(serverProfiles.map { $0.displayName.lowercased() })
+        if !taken.contains(base.lowercased()) { return base }
+        var counter = 2
+        while true {
+            let candidate = "\(base) \(counter)"
+            if !taken.contains(candidate.lowercased()) {
+                return candidate
+            }
+            counter += 1
+        }
+    }
+
+    private func persistServerProfiles() {
+        if let data = try? JSONEncoder().encode(serverProfiles) {
+            UserDefaults.standard.set(data, forKey: Self.serverProfilesKey)
+        }
+    }
+
+    private func persistLegacyConnectionValues() {
+        UserDefaults.standard.set(_serverURL, forKey: Self.serverURLKey)
+        UserDefaults.standard.set(_username, forKey: Self.usernameKey)
+        if _password.isEmpty {
+            KeychainHelper.delete(Self.passwordKeychainKey)
+        } else {
+            KeychainHelper.save(_password, forKey: Self.passwordKeychainKey)
+        }
+    }
+
+    private func loadServerProfilePassword(for profileID: String) -> String? {
+        KeychainHelper.load(forKey: Self.serverProfilePasswordKey(for: profileID))
+    }
+
+    private func saveServerProfilePassword(_ value: String, for profileID: String) {
+        let key = Self.serverProfilePasswordKey(for: profileID)
+        if value.isEmpty {
+            KeychainHelper.delete(key)
+        } else {
+            KeychainHelper.save(value, forKey: key)
+        }
+    }
+
+    private func bootstrapServerProfiles(
+        legacyServerURL: String,
+        legacyUsername: String,
+        legacyPassword: String
+    ) {
+        if let data = UserDefaults.standard.data(forKey: Self.serverProfilesKey),
+           let decoded = try? JSONDecoder().decode([ServerProfile].self, from: data),
+           !decoded.isEmpty {
+            serverProfiles = decoded
+        } else {
+            let baseName = normalizedProfileName(nil, fallbackServerURL: legacyServerURL)
+            let migrated = ServerProfile(
+                id: UUID().uuidString,
+                name: uniqueProfileName(baseName),
+                serverURL: legacyServerURL,
+                username: legacyUsername
+            )
+            serverProfiles = [migrated]
+            saveServerProfilePassword(legacyPassword, for: migrated.id)
+            persistServerProfiles()
+        }
+
+        if let storedID = UserDefaults.standard.string(forKey: Self.activeServerProfileIDKey),
+           serverProfiles.contains(where: { $0.id == storedID }) {
+            _activeServerProfileID = storedID
+        } else {
+            _activeServerProfileID = serverProfiles.first?.id
+            UserDefaults.standard.set(_activeServerProfileID, forKey: Self.activeServerProfileIDKey)
+        }
+
+        guard let active = activeServerProfile else { return }
+        _serverURL = active.serverURL
+        _username = active.username
+        if let scopedPassword = loadServerProfilePassword(for: active.id) {
+            _password = scopedPassword
+        } else {
+            _password = legacyPassword
+            saveServerProfilePassword(legacyPassword, for: active.id)
+        }
+        persistLegacyConnectionValues()
+    }
+
+    private func syncActiveServerProfileFromCurrentConnection(persistPassword: Bool) {
+        guard let id = _activeServerProfileID,
+              let idx = serverProfiles.firstIndex(where: { $0.id == id }) else { return }
+        var updated = serverProfiles[idx]
+        updated.serverURL = _serverURL
+        updated.username = _username
+        serverProfiles[idx] = updated
+        persistServerProfiles()
+        if persistPassword {
+            saveServerProfilePassword(_password, for: id)
+        }
+    }
+
+    func renameActiveServerProfile(_ rawName: String) {
+        guard let id = _activeServerProfileID,
+              let idx = serverProfiles.firstIndex(where: { $0.id == id }) else { return }
+        var updated = serverProfiles[idx]
+        updated.name = normalizedProfileName(rawName, fallbackServerURL: updated.serverURL)
+        serverProfiles[idx] = updated
+        persistServerProfiles()
+    }
+
+    func addServerProfile() {
+        let base = normalizedProfileName(nil, fallbackServerURL: serverURL)
+        let profile = ServerProfile(
+            id: UUID().uuidString,
+            name: uniqueProfileName(base),
+            serverURL: serverURL,
+            username: username
+        )
+        serverProfiles.append(profile)
+        persistServerProfiles()
+        saveServerProfilePassword(password, for: profile.id)
+        selectServerProfile(profile.id)
+    }
+
+    func deleteActiveServerProfile() {
+        guard canDeleteActiveServerProfile,
+              let activeID = _activeServerProfileID,
+              let activeIndex = serverProfiles.firstIndex(where: { $0.id == activeID }) else { return }
+
+        serverProfiles.remove(at: activeIndex)
+        KeychainHelper.delete(Self.serverProfilePasswordKey(for: activeID))
+        persistServerProfiles()
+
+        let fallbackIndex = min(activeIndex, serverProfiles.count - 1)
+        if fallbackIndex >= 0, fallbackIndex < serverProfiles.count {
+            selectServerProfile(serverProfiles[fallbackIndex].id)
+        }
+    }
+
+    func selectServerProfile(_ profileID: String) {
+        guard let profile = serverProfiles.first(where: { $0.id == profileID }) else { return }
+        let scopedPassword = loadServerProfilePassword(for: profile.id) ?? ""
+        let didChangeConnection = _serverURL != profile.serverURL || _username != profile.username || _password != scopedPassword
+
+        _activeServerProfileID = profile.id
+        UserDefaults.standard.set(profile.id, forKey: Self.activeServerProfileIDKey)
+
+        _serverURL = profile.serverURL
+        _username = profile.username
+        _password = scopedPassword
+        persistLegacyConnectionValues()
+
+        if didChangeConnection {
+            disconnectSSE()
+            isConnected = false
+            connectionError = nil
+            serverVersion = nil
         }
     }
 
@@ -401,10 +624,10 @@ final class AppState {
     var streamingPartTexts: [String: String] { get { messageStore.streamingPartTexts } set { messageStore.streamingPartTexts = newValue } }
 
     var modelPresets: [ModelPreset] = [
+        ModelPreset(displayName: "GPT-5.3 Codex", providerID: "openai", modelID: "gpt-5.3-codex", variant: "high"),
         ModelPreset(displayName: "GLM-5", providerID: "zai-coding-plan", modelID: "glm-5"),
         ModelPreset(displayName: "Opus 4.6", providerID: "anthropic", modelID: "claude-opus-4-6"),
         ModelPreset(displayName: "Sonnet 4.6", providerID: "anthropic", modelID: "claude-sonnet-4-6"),
-        ModelPreset(displayName: "GPT-5.3 Codex", providerID: "openai", modelID: "gpt-5.3-codex"),
         ModelPreset(displayName: "GPT-5.2", providerID: "openai", modelID: "gpt-5.2"),
         ModelPreset(displayName: "Gemini 3.1 Pro", providerID: "google", modelID: "gemini-3.1-pro-preview"),
         ModelPreset(displayName: "Gemini 3 Flash", providerID: "google", modelID: "gemini-3-flash-preview"),
@@ -429,6 +652,23 @@ final class AppState {
         }
     }
     private var _showArchivedSessions: Bool = false
+    var hideEmptyPreviewPaneOnIPad: Bool {
+        get { _hideEmptyPreviewPaneOnIPad }
+        set {
+            _hideEmptyPreviewPaneOnIPad = newValue
+            UserDefaults.standard.set(newValue, forKey: Self.hideEmptyPreviewPaneOnIPadKey)
+        }
+    }
+    private var _hideEmptyPreviewPaneOnIPad: Bool = false
+
+    var hideDotFilesAndFoldersInWorkspace: Bool {
+        get { _hideDotFilesAndFoldersInWorkspace }
+        set {
+            _hideDotFilesAndFoldersInWorkspace = newValue
+            UserDefaults.standard.set(newValue, forKey: Self.hideDotFilesAndFoldersInWorkspaceKey)
+        }
+    }
+    private var _hideDotFilesAndFoldersInWorkspace: Bool = false
     var expandedSessionIDs: Set<String> = []
 
     var projects: [Project] = []
@@ -1135,9 +1375,16 @@ final class AppState {
         }
         let tempMessageID = appendOptimisticUserMessage(text)
         let model = selectedModel.map { Message.ModelInfo(providerID: $0.providerID, modelID: $0.modelID) }
+        let modelVariant = selectedModel?.variant
         let agentName = selectedAgent?.name ?? "build"
         do {
-            try await apiClient.promptAsync(sessionID: sessionID, text: text, agent: agentName, model: model)
+            try await apiClient.promptAsync(
+                sessionID: sessionID,
+                text: text,
+                agent: agentName,
+                model: model,
+                variant: modelVariant
+            )
             return true
         } catch {
             let recovered = await recoverFromMissingCurrentSessionIfNeeded(error: error, requestedSessionID: sessionID)

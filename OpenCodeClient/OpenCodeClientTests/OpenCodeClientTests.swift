@@ -35,19 +35,158 @@ struct OpenCodeClientTests {
     }
 
     @Test @MainActor func migrateLegacyDefaultServerAddress() {
-        let key = "serverURL"
-        let previous = UserDefaults.standard.string(forKey: key)
+        let serverURLKey = "serverURL"
+        let usernameKey = "username"
+        let profilesKey = "serverProfiles"
+        let activeProfileKey = "activeServerProfileID"
+
+        let previousServerURL = UserDefaults.standard.string(forKey: serverURLKey)
+        let previousUsername = UserDefaults.standard.string(forKey: usernameKey)
+        let previousProfiles = UserDefaults.standard.data(forKey: profilesKey)
+        let previousActiveProfile = UserDefaults.standard.string(forKey: activeProfileKey)
+        let previousLegacyPassword = KeychainHelper.load(forKey: "password")
+
         defer {
-            if let previous {
-                UserDefaults.standard.set(previous, forKey: key)
+            if let previousServerURL {
+                UserDefaults.standard.set(previousServerURL, forKey: serverURLKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: key)
+                UserDefaults.standard.removeObject(forKey: serverURLKey)
+            }
+            if let previousUsername {
+                UserDefaults.standard.set(previousUsername, forKey: usernameKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: usernameKey)
+            }
+            if let previousProfiles {
+                UserDefaults.standard.set(previousProfiles, forKey: profilesKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: profilesKey)
+            }
+            if let previousActiveProfile {
+                UserDefaults.standard.set(previousActiveProfile, forKey: activeProfileKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: activeProfileKey)
+            }
+            if let previousLegacyPassword {
+                KeychainHelper.save(previousLegacyPassword, forKey: "password")
+            } else {
+                KeychainHelper.delete("password")
             }
         }
 
-        UserDefaults.standard.set("localhost:4096", forKey: key)
+        UserDefaults.standard.removeObject(forKey: profilesKey)
+        UserDefaults.standard.removeObject(forKey: activeProfileKey)
+        UserDefaults.standard.set("localhost:4096", forKey: serverURLKey)
         let state = AppState()
         #expect(state.serverURL == "127.0.0.1:4096")
+    }
+
+    @Test @MainActor func serverProfilesCanBeAddedAndSwitched() {
+        let serverURLKey = "serverURL"
+        let usernameKey = "username"
+        let profilesKey = "serverProfiles"
+        let activeProfileKey = "activeServerProfileID"
+
+        let previousServerURL = UserDefaults.standard.string(forKey: serverURLKey)
+        let previousUsername = UserDefaults.standard.string(forKey: usernameKey)
+        let previousProfiles = UserDefaults.standard.data(forKey: profilesKey)
+        let previousActiveProfile = UserDefaults.standard.string(forKey: activeProfileKey)
+        let previousLegacyPassword = KeychainHelper.load(forKey: "password")
+
+        defer {
+            if let previousServerURL {
+                UserDefaults.standard.set(previousServerURL, forKey: serverURLKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: serverURLKey)
+            }
+            if let previousUsername {
+                UserDefaults.standard.set(previousUsername, forKey: usernameKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: usernameKey)
+            }
+            if let previousProfiles {
+                UserDefaults.standard.set(previousProfiles, forKey: profilesKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: profilesKey)
+            }
+            if let previousActiveProfile {
+                UserDefaults.standard.set(previousActiveProfile, forKey: activeProfileKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: activeProfileKey)
+            }
+            if let previousLegacyPassword {
+                KeychainHelper.save(previousLegacyPassword, forKey: "password")
+            } else {
+                KeychainHelper.delete("password")
+            }
+        }
+
+        UserDefaults.standard.removeObject(forKey: profilesKey)
+        UserDefaults.standard.removeObject(forKey: activeProfileKey)
+        UserDefaults.standard.set("https://one.example.com", forKey: serverURLKey)
+        UserDefaults.standard.set("one-user", forKey: usernameKey)
+        KeychainHelper.save("one-pass", forKey: "password")
+
+        let state = AppState()
+        #expect(state.serverProfiles.count == 1)
+
+        state.addServerProfile()
+        state.renameActiveServerProfile("Second")
+        state.serverURL = "https://two.example.com"
+        state.username = "two-user"
+        state.password = "two-pass"
+
+        #expect(state.serverProfiles.count == 2)
+        let firstProfileID = state.serverProfiles.first(where: { $0.displayName != "Second" })?.id
+        #expect(firstProfileID != nil)
+        if let firstProfileID {
+            state.selectServerProfile(firstProfileID)
+            #expect(state.serverURL == "https://one.example.com")
+            #expect(state.username == "one-user")
+            #expect(state.password == "one-pass")
+        }
+    }
+
+    @Test @MainActor func defaultModelIsGPT53CodexWithHighVariant() {
+        let state = AppState()
+        #expect(state.selectedModel?.providerID == "openai")
+        #expect(state.selectedModel?.modelID == "gpt-5.3-codex")
+        #expect(state.selectedModel?.variant == "high")
+    }
+
+    @Test @MainActor func workspaceVisibilitySettingsPersist() {
+        let hidePreviewKey = "hideEmptyPreviewPaneOnIPad"
+        let hideDotFilesKey = "hideDotFilesAndFoldersInWorkspace"
+
+        let previousHidePreview = UserDefaults.standard.object(forKey: hidePreviewKey)
+        let previousHideDotFiles = UserDefaults.standard.object(forKey: hideDotFilesKey)
+
+        defer {
+            if let previousHidePreview {
+                UserDefaults.standard.set(previousHidePreview, forKey: hidePreviewKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: hidePreviewKey)
+            }
+            if let previousHideDotFiles {
+                UserDefaults.standard.set(previousHideDotFiles, forKey: hideDotFilesKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: hideDotFilesKey)
+            }
+        }
+
+        UserDefaults.standard.removeObject(forKey: hidePreviewKey)
+        UserDefaults.standard.removeObject(forKey: hideDotFilesKey)
+
+        let state = AppState()
+        #expect(state.hideEmptyPreviewPaneOnIPad == false)
+        #expect(state.hideDotFilesAndFoldersInWorkspace == false)
+
+        state.hideEmptyPreviewPaneOnIPad = true
+        state.hideDotFilesAndFoldersInWorkspace = true
+
+        let reloaded = AppState()
+        #expect(reloaded.hideEmptyPreviewPaneOnIPad == true)
+        #expect(reloaded.hideDotFilesAndFoldersInWorkspace == true)
     }
 
     @Test func sessionDecoding() throws {

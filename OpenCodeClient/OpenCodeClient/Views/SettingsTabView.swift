@@ -16,12 +16,51 @@ struct SettingsTabView: View {
     @State private var publicKeyForSheet = ""
     @State private var sshConfig: SSHTunnelConfig = .default
     @State private var publicKeyLoadError: String?
+    @State private var showDeleteServerProfileAlert = false
+    @State private var activeProfileName = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section(L10n.t(.settingsServerConnection)) {
                     let info = AppState.serverURLInfo(state.serverURL)
+
+                    Picker(L10n.t(.settingsProfile), selection: Binding(
+                        get: { state.activeServerProfileID ?? "" },
+                        set: { newValue in
+                            guard !newValue.isEmpty else { return }
+                            state.selectServerProfile(newValue)
+                            activeProfileName = state.activeServerProfileName
+                            normalizeServerURLInPlace(state: state)
+                            refreshConnectionAndSSE()
+                        }
+                    )) {
+                        ForEach(state.serverProfiles) { profile in
+                            Text(profile.displayName).tag(profile.id)
+                        }
+                    }
+
+                    TextField(L10n.t(.settingsProfileName), text: $activeProfileName)
+                        .onChange(of: activeProfileName) { _, newValue in
+                            state.renameActiveServerProfile(newValue)
+                        }
+
+                    HStack {
+                        Button(L10n.t(.settingsAddProfile)) {
+                            state.addServerProfile()
+                            activeProfileName = state.activeServerProfileName
+                            normalizeServerURLInPlace(state: state)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Spacer()
+
+                        Button(L10n.t(.settingsDeleteProfile), role: .destructive) {
+                            showDeleteServerProfileAlert = true
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!state.canDeleteActiveServerProfile)
+                    }
 
                     TextField(L10n.t(.settingsAddress), text: $state.serverURL)
                         .focused($isServerAddressFocused)
@@ -288,6 +327,8 @@ struct SettingsTabView: View {
                     }
                     
                     Toggle(L10n.t(.settingsShowArchivedSessions), isOn: $state.showArchivedSessions)
+                    Toggle(L10n.t(.settingsHideEmptyPreviewPaneOnIPad), isOn: $state.hideEmptyPreviewPaneOnIPad)
+                    Toggle(L10n.t(.settingsHideDotFilesAndFolders), isOn: $state.hideDotFilesAndFoldersInWorkspace)
                 }
 
                 Section(L10n.t(.settingsSpeechRecognition)) {
@@ -342,8 +383,20 @@ struct SettingsTabView: View {
             .navigationTitle(L10n.t(.settingsTitle))
             .onAppear {
                 sshConfig = state.sshTunnelManager.config
+                activeProfileName = state.activeServerProfileName
                 _ = try? state.sshTunnelManager.generateOrGetPublicKey()
                 reconnectSSHTunnelIfNeeded(force: false)
+            }
+            .alert(L10n.t(.settingsDeleteProfileTitle), isPresented: $showDeleteServerProfileAlert) {
+                Button(L10n.t(.commonCancel), role: .cancel) {}
+                Button(L10n.t(.settingsDeleteProfile), role: .destructive) {
+                    state.deleteActiveServerProfile()
+                    activeProfileName = state.activeServerProfileName
+                    normalizeServerURLInPlace(state: state)
+                    refreshConnectionAndSSE()
+                }
+            } message: {
+                Text(L10n.t(.settingsDeleteProfileMessage))
             }
             .sheet(isPresented: $showPublicKeySheet) {
                 PublicKeySheet(
@@ -391,6 +444,17 @@ struct SettingsTabView: View {
         Task {
             state.sshTunnelManager.disconnect()
             await state.sshTunnelManager.connect()
+        }
+    }
+
+    private func refreshConnectionAndSSE() {
+        Task {
+            await state.refresh()
+            if state.isConnected {
+                state.connectSSE()
+            } else {
+                state.disconnectSSE()
+            }
         }
     }
 

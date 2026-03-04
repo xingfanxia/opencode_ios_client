@@ -25,6 +25,12 @@ enum L10n {
 
         case settingsTitle
         case settingsServerConnection
+        case settingsProfile
+        case settingsProfileName
+        case settingsAddProfile
+        case settingsDeleteProfile
+        case settingsDeleteProfileTitle
+        case settingsDeleteProfileMessage
         case settingsAddress
         case settingsUsername
         case settingsPassword
@@ -77,6 +83,8 @@ enum L10n {
         case settingsRotate
 
         case settingsShowArchivedSessions
+        case settingsHideEmptyPreviewPaneOnIPad
+        case settingsHideDotFilesAndFolders
         case settingsConnecting
         case settingsProject
         case settingsProjectServerDefault
@@ -220,6 +228,12 @@ enum L10n {
 
         Key.settingsTitle.rawValue: "Settings",
         Key.settingsServerConnection.rawValue: "Server Connection",
+        Key.settingsProfile.rawValue: "Profile",
+        Key.settingsProfileName.rawValue: "Profile Name",
+        Key.settingsAddProfile.rawValue: "Add Profile",
+        Key.settingsDeleteProfile.rawValue: "Delete Profile",
+        Key.settingsDeleteProfileTitle.rawValue: "Delete Profile?",
+        Key.settingsDeleteProfileMessage.rawValue: "Delete this server profile? You can add it again later.",
         Key.settingsAddress.rawValue: "Address",
         Key.settingsUsername.rawValue: "Username",
         Key.settingsPassword.rawValue: "Password",
@@ -271,6 +285,8 @@ enum L10n {
         Key.settingsUntrusted.rawValue: "Untrusted",
         Key.settingsRotate.rawValue: "Rotate",
         Key.settingsShowArchivedSessions.rawValue: "Show Archived Sessions",
+        Key.settingsHideEmptyPreviewPaneOnIPad.rawValue: "Hide Empty Preview Pane (iPad)",
+        Key.settingsHideDotFilesAndFolders.rawValue: "Hide .files and .folders in Workspace",
         Key.settingsConnecting.rawValue: "Connecting...",
         Key.settingsProject.rawValue: "Project (Workspace)",
         Key.settingsProjectServerDefault.rawValue: "Server default",
@@ -414,6 +430,12 @@ enum L10n {
 
         Key.settingsTitle.rawValue: "设置",
         Key.settingsServerConnection.rawValue: "服务器连接",
+        Key.settingsProfile.rawValue: "配置",
+        Key.settingsProfileName.rawValue: "配置名称",
+        Key.settingsAddProfile.rawValue: "新增配置",
+        Key.settingsDeleteProfile.rawValue: "删除配置",
+        Key.settingsDeleteProfileTitle.rawValue: "删除配置？",
+        Key.settingsDeleteProfileMessage.rawValue: "确认删除当前服务器配置？你之后仍可重新添加。",
         Key.settingsAddress.rawValue: "地址",
         Key.settingsUsername.rawValue: "用户名",
         Key.settingsPassword.rawValue: "密码",
@@ -468,6 +490,8 @@ enum L10n {
         Key.errorWanRequiresHttps.rawValue: "WAN 地址必须使用 HTTPS",
         Key.errorUsingLanHttp.rawValue: "正在使用 LAN HTTP",
         Key.settingsShowArchivedSessions.rawValue: "显示已归档会话",
+        Key.settingsHideEmptyPreviewPaneOnIPad.rawValue: "无文件时隐藏预览栏（iPad）",
+        Key.settingsHideDotFilesAndFolders.rawValue: "隐藏 Workspace 中的 .文件和 .文件夹",
         Key.settingsConnecting.rawValue: "连接中...",
         Key.settingsProject.rawValue: "项目 (Workspace)",
         Key.settingsProjectServerDefault.rawValue: "服务器默认",
